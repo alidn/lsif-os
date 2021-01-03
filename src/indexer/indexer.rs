@@ -122,7 +122,6 @@ where
         let (ref_sender, ref_receiver) = channel();
 
         let capture_names = get_capture_names(&query, self.opt.language.get_queries());
-        get_captures_names_2(&query, self.opt.language.get_queries());
 
         let bar = ProgressBar::new(files.len() as u64);
         bar.set_style(
