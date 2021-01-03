@@ -317,7 +317,6 @@ fn get_capture_names(query: &Query, query_src: String) -> Vec<String> {
         } else {
             query_src.drain(start_byte..).collect()
         };
-        println!("==\n{}\n==", drained);
         let query_start = drained.find('@').unwrap() + 1;
         let mut drained: String = drained.drain(query_start..).collect();
         let query_end = drained.find(|c| c == '\n' || c == ' ' || c == ')').unwrap();
