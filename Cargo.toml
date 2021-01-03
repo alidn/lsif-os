@@ -1,0 +1,50 @@
+[package]
+name = "zas-lsif-tools"
+version = "0.1.0"
+authors = ["zas"]
+edition = "2018"
+
+[dependencies]
+# Parser
+tree-sitter = "0.17.1"
+
+# Error Handling
+anyhow = "1.0.37"
+
+# Concurrency Utils
+rayon = "1"
+crossbeam-channel = "0.5.0"
+
+# File Traversing
+ignore = "0.4"
+
+# JSON Serializing
+serde = { version = "1.0", features = ["derive"]}
+serde_json = "1.0"
+serde_derive = "1.0"
+url_serde = "0.2"
+
+# LSP Types
+languageserver-types = "0.54"
+
+# Command-line Arg Parsing
+structopt = "0.3.21"
+
+# Stack-allocated Strings
+smol_str = "0.1.17"
+
+xdg = "2.1.0"
+
+# Some fancy progress-bar stuff, should probably be removed!
+indicatif = "0.15.0"
+
+[build-dependencies]
+cc="*"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "benchmark"
+harness = false
+
