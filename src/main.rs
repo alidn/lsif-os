@@ -11,7 +11,6 @@ mod analyzer;
 mod cli;
 mod emitter;
 pub mod indexer;
-mod language_tools;
 mod protocol;
 
 fn main() {

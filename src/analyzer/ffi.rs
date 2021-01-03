@@ -1,7 +1,7 @@
 use anyhow::{anyhow as error, Result};
 use tree_sitter::{LanguageError, Parser, Query};
 
-use crate::{language_tools::LanguageTools, protocol::types::Language};
+use crate::{protocol::types::Language};
 
 extern "C" {
     fn tree_sitter_javascript() -> tree_sitter::Language;
@@ -18,7 +18,7 @@ extern "C" {
 
 pub fn query_for_language(language: &Language) -> Result<Query> {
     let query_src = language.get_queries();
-    let query = Query::new(get_language(&language), &query_src).map_err(|e| {
+    let query = Query::new(ts_language_from(&language), &query_src).map_err(|e| {
         error!(
             "\n\nError in the query file for the {:?} language: '{}' is not valid {:?}. (line {}, column {})\n",
             language, e.message, e.kind, e.row + 1, e.column + 1,
@@ -33,7 +33,7 @@ pub fn parser_for(language: tree_sitter::Language) -> Result<Parser, LanguageErr
     Ok(parser)
 }
 
-pub fn get_language(language: &Language) -> tree_sitter::Language {
+pub fn ts_language_from(language: &Language) -> tree_sitter::Language {
     match language {
         Language::JavaScript => unsafe { tree_sitter_javascript() },
         Language::GraphQL => unsafe { tree_sitter_graphql() },

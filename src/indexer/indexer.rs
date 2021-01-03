@@ -4,6 +4,7 @@ use std::{
     sync::{mpsc::channel, Arc},
 };
 
+use anyhow::Context;
 use ignore::{DirEntry, Walk};
 use indicatif::{ProgressBar, ProgressStyle};
 use languageserver_types::{NumberOrString, Url};
@@ -13,14 +14,13 @@ use tree_sitter::{Parser, Query, Tree};
 use crate::{
     analyzer::{
         analyzer::{Analyzer, Definition, Reference},
-        language_tools::{get_language, parser_for, query_for_language},
+        ffi::{parser_for, query_for_language, ts_language_from},
         lsif_data_cache::{DefinitionInfo, LsifDataCache},
         utils::get_file_content,
     },
     cli::Opts,
     edge,
     emitter::emitter::Emitter,
-    language_tools::LanguageTools,
     protocol::types::{
         Contents, DefinitionResult, Document, Edge, EdgeData, HoverResult, LSIFMarkedString,
         Language, MetaData, ReferenceResult, ResultSet, ToolInfo, ID,
@@ -121,31 +121,8 @@ where
         let (def_sender, def_receiver) = channel();
         let (ref_sender, ref_receiver) = channel();
 
-        fn get_capture_names(query: &Query, query_src: String) -> Vec<String> {
-            let start_bytes: Vec<usize> = (0..query.pattern_count())
-                .map(|i| query.start_byte_for_pattern(i))
-                .collect();
-
-            let mut patterns = vec![];
-            for pat_idx in 1..=start_bytes.len() {
-                let mut query_src = query_src.clone();
-                let start_byte = start_bytes[pat_idx - 1];
-                let mut drained: String = if pat_idx != start_bytes.len() {
-                    query_src.drain(start_byte..start_bytes[pat_idx]).collect()
-                } else {
-                    query_src.drain(start_byte..).collect()
-                };
-                let query_start = drained.find('@').unwrap() + 1;
-                let mut drained: String = drained.drain(query_start..).collect();
-                let query_end = drained.find(|c| c == '\n' || c == ' ' || c == ')').unwrap();
-                let query_name: String = drained.drain(..query_end).collect();
-                patterns.push(query_name);
-            }
-
-            patterns
-        }
-
         let capture_names = get_capture_names(&query, self.opt.language.get_queries());
+        get_captures_names_2(&query, self.opt.language.get_queries());
 
         let bar = ProgressBar::new(files.len() as u64);
         bar.set_style(
@@ -278,7 +255,7 @@ where
                 .filter(|dir_entry_res| dir_entry_res.is_ok())
                 .map(std::result::Result::unwrap)
                 .filter(move |entry| {
-                    entry.metadata().unwrap().is_file() && is_js_file(entry, exs.clone())
+                    entry.metadata().unwrap().is_file() && check_file(entry, exs.clone())
                 })
                 .map(DirEntry::into_path)
                 .collect();
@@ -292,7 +269,7 @@ fn get_files_parsers(
     lang: &Language,
     files: Vec<PathBuf>,
 ) -> anyhow::Result<HashMap<String, (Parser, Tree, String)>> {
-    let lang = get_language(lang);
+    let lang = ts_language_from(lang);
     let parsers = files
         .into_par_iter()
         .map(|path| {
@@ -309,7 +286,7 @@ fn get_files_parsers(
     Ok(parsers)
 }
 
-fn is_js_file(dir_entry: &DirEntry, extensions: Vec<String>) -> bool {
+fn check_file(dir_entry: &DirEntry, extensions: Vec<String>) -> bool {
     for ex in extensions {
         if has_extension(dir_entry, &ex) {
             return true;
@@ -325,4 +302,29 @@ fn has_extension(dir_entry: &DirEntry, target_ext: &str) -> bool {
         .and_then(|e| e.to_str())
         .map(|e| e == target_ext)
         .unwrap_or(false)
+}
+
+fn get_capture_names(query: &Query, query_src: String) -> Vec<String> {
+    let start_bytes: Vec<usize> = (0..query.pattern_count())
+        .map(|i| query.start_byte_for_pattern(i))
+        .collect();
+
+    let mut patterns = vec![];
+    for pat_idx in 1..=start_bytes.len() {
+        let mut query_src = query_src.clone();
+        let start_byte = start_bytes[pat_idx - 1];
+        let mut drained: String = if pat_idx != start_bytes.len() {
+            query_src.drain(start_byte..start_bytes[pat_idx]).collect()
+        } else {
+            query_src.drain(start_byte..).collect()
+        };
+        println!("==\n{}\n==", drained);
+        let query_start = drained.find('@').unwrap() + 1;
+        let mut drained: String = drained.drain(query_start..).collect();
+        let query_end = drained.find(|c| c == '\n' || c == ' ' || c == ')').unwrap();
+        let query_name: String = drained.drain(..query_end).collect();
+        patterns.push(query_name);
+    }
+
+    patterns
 }

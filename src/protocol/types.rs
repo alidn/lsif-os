@@ -246,6 +246,29 @@ pub enum Language {
     TypeScript,
 }
 
+impl Language {
+    pub fn get_extensions(&self) -> Vec<String> {
+        match self {
+            Language::JavaScript => vec!["js".to_string()],
+            Language::GraphQL => vec!["graphql".to_string()],
+            Language::Lua => vec!["lua".to_string()],
+            Language::Java => vec!["java".to_string()],
+            Language::TypeScript => vec!["ts".to_string()],
+        }
+    }
+
+    pub fn get_queries(&self) -> String {
+        match self {
+            Language::JavaScript => include_str!("../../queries/javascript.scm"),
+            Language::GraphQL => include_str!("../../queries/graphql.scm"),
+            Language::Lua => include_str!("../../queries/lua.scm"),
+            Language::Java => include_str!("../../queries/java.scm"),
+            Language::TypeScript => include_str!("../../queries/typescript.scm"),
+        }
+        .to_string()
+    }
+}
+
 impl FromStr for Language {
     type Err = String;
 
