@@ -25,6 +25,14 @@
 (variable_declarator
     name: (identifier) @definition.scoped)
 
+(export_statement
+    declaration: (class_declaration
+                    name: (identifier) @definition.exported))
+
+(class_declaration
+    name: (identifier) @definition.scoped)
+
+
 ; References
 
 (identifier) @reference

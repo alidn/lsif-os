@@ -137,7 +137,7 @@ fn main() {
         .file(dir.join("parser.c"))
         .compile("tree-sitter-typescript");
 
-    // <------- TypeScript ------->
+    // <------- TypeScript & TSX ------->
 
     build_dir("parsers/tree-sitter-typescript/tsx", "tsx");
     build_dir("parsers/tree-sitter-typescript/typescript", "typescript");

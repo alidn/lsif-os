@@ -14,6 +14,10 @@
   <component name="ChangeListManager">
     <list default="true" id="e814eaaf-b76e-4eb2-b409-aee6622b4645" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/queries/javascript.scm" beforeDir="false" afterPath="$PROJECT_DIR$/queries/javascript.scm" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/analyzer/analyzer.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/analyzer/analyzer.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/analyzer/lsif_data_cache.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/analyzer/lsif_data_cache.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/indexer/indexer.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/indexer/indexer.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -59,7 +63,7 @@
     <property name="node.js.selected.package.tslint" value="(autodetect)" />
     <property name="nodejs_package_manager_path" value="npm" />
     <property name="org.rust.cargo.project.model.PROJECT_DISCOVERY" value="true" />
-    <property name="settings.editor.selected.configurable" value="language.rust.cargo" />
+    <property name="settings.editor.selected.configurable" value="preferences.lookFeel" />
   </component>
   <component name="RunAnythingCache">
     <option name="myCommands">
@@ -186,7 +190,7 @@
       <workItem from="1609364162693" duration="25058000" />
       <workItem from="1609438948761" duration="19000" />
       <workItem from="1609439252797" duration="438000" />
-      <workItem from="1609659723563" duration="4632000" />
+      <workItem from="1609659723563" duration="14905000" />
     </task>
     <servers />
   </component>

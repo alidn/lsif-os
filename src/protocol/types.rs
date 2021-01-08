@@ -41,6 +41,7 @@ pub enum Vertex {
     ResultSet(ResultSet),
     HoverResult(HoverResult),
     MetaData(MetaData),
+    Moniker(Moniker),
 
     // Method results
     DefinitionResult(DefinitionResult),
@@ -58,6 +59,7 @@ pub enum Edge {
     Contains(MultiEdgeData),
     RefersTo(EdgeData),
     Next(EdgeData),
+    Moniker(EdgeData),
 
     Item(Item),
 
@@ -207,6 +209,14 @@ pub struct MetaData {
     pub(crate) project_root: lsp::Url,
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Moniker {
+    pub(crate) kind: String,
+    pub(crate) scheme: String,
+    pub(crate) identifier: String,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolInfo {
@@ -234,8 +244,7 @@ pub struct Project {
     pub language_id: Language,
 }
 
-/// https://github.com/Microsoft/language-server-protocol/issues/213
-/// For examples, see: https://code.visualstudio.com/docs/languages/identifiers.
+/// This enum represents all the currently supported languages.
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum Language {
@@ -253,11 +262,12 @@ impl Language {
             Language::GraphQL => vec!["graphql".to_string()],
             Language::Lua => vec!["lua".to_string()],
             Language::Java => vec!["java".to_string()],
-            Language::TypeScript => vec!["ts".to_string()],
+            Language::TypeScript => vec!["ts".to_string(), "tsx".to_string()],
         }
     }
 
-    pub fn get_queries(&self) -> String {
+    /// Returns the content of the corresponding query file.
+    pub fn get_query_source(&self) -> String {
         match self {
             Language::JavaScript => include_str!("../../queries/javascript.scm"),
             Language::GraphQL => include_str!("../../queries/graphql.scm"),
@@ -299,26 +309,14 @@ impl ToString for Language {
     }
 }
 
-#[macro_export]
-macro_rules! impl_from_variant {
-    ($variant: ident, $en: ident) => {
-        impl From<$variant> for $en {
-            fn from(v: $variant) -> $en {
-                $en::$variant(v)
-            }
-        }
-    };
-}
-
-impl_from_variant!(Project, Vertex);
-impl_from_variant!(Document, Vertex);
-impl_from_variant!(Range, Vertex);
-impl_from_variant!(ResultSet, Vertex);
-impl_from_variant!(MetaData, Vertex);
-impl_from_variant!(ReferenceResult, Vertex);
-impl_from_variant!(DefinitionResult, Vertex);
-impl_from_variant!(HoverResult, Vertex);
-
+/// # Examples
+/// The following code defines a edge of type `Next` going from `a` to `b`
+///
+/// ```
+/// let a = 3;
+/// let b = 3;
+/// let edge = edge!(Next, a -> b);
+/// ```
 #[macro_export]
 macro_rules! edge {
     ($kind: ident, $from: ident -> $to: ident) => {
@@ -342,3 +340,42 @@ macro_rules! edge {
         })
     };
 }
+
+/// Implements the `From` trait for the given enum and enum variant.
+/// The first parameter is the enum variant and the second is the enum.
+///
+/// # Examples
+///
+/// ```
+/// enum StringOrVec {
+///     String(String),
+///     Vec(Vec<String>)
+/// }
+/// 
+/// impl_from_variant(String, StringOrVec);
+/// impl_from_variant(Vec<String>, StringOrVec);
+///
+/// fn ex(s: String) -> StringOrVec {
+///     s.into()
+/// }
+/// ```
+#[macro_export]
+macro_rules! impl_from_variant {
+    ($variant: ident, $en: ident) => {
+        impl From<$variant> for $en {
+            fn from(v: $variant) -> $en {
+                $en::$variant(v)
+            }
+        }
+    };
+}
+
+impl_from_variant!(Project, Vertex);
+impl_from_variant!(Document, Vertex);
+impl_from_variant!(Range, Vertex);
+impl_from_variant!(ResultSet, Vertex);
+impl_from_variant!(MetaData, Vertex);
+impl_from_variant!(ReferenceResult, Vertex);
+impl_from_variant!(DefinitionResult, Vertex);
+impl_from_variant!(HoverResult, Vertex);
+impl_from_variant!(Moniker, Vertex);

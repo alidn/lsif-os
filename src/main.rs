@@ -12,13 +12,9 @@ mod cli;
 mod emitter;
 pub mod indexer;
 mod protocol;
+mod query_tests;
 
 fn main() {
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(4)
-        .build_global()
-        .unwrap();
-
     let args = env::args();
     // A hack to avoid sub-commands
     for arg in args {

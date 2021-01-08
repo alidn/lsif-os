@@ -4,7 +4,7 @@ use std::{
     sync::{mpsc::channel, Arc},
 };
 
-use anyhow::Context;
+use anyhow::Result;
 use ignore::{DirEntry, Walk};
 use indicatif::{ProgressBar, ProgressStyle};
 use languageserver_types::{NumberOrString, Url};
@@ -13,8 +13,8 @@ use tree_sitter::{Parser, Query, Tree};
 
 use crate::{
     analyzer::{
-        analyzer::{Analyzer, Definition, Reference},
-        ffi::{parser_for, query_for_language, ts_language_from},
+        analyzer::{Analyzer, Definition, DefinitionKind, Reference},
+        ffi::{parser_for_language, query_for_language, ts_language_from},
         lsif_data_cache::{DefinitionInfo, LsifDataCache},
         utils::get_file_content,
     },
@@ -23,7 +23,7 @@ use crate::{
     emitter::emitter::Emitter,
     protocol::types::{
         Contents, DefinitionResult, Document, Edge, EdgeData, HoverResult, LSIFMarkedString,
-        Language, MetaData, ReferenceResult, ResultSet, ToolInfo, ID,
+        Language, MetaData, Moniker, ReferenceResult, ResultSet, ToolInfo, ID,
     },
 };
 
@@ -46,9 +46,9 @@ impl<E> Indexer<E>
 where
     E: Emitter,
 {
-    /// Generates an LSIF dump from a workspace by traversing through files of the given language
+    /// Generates an LSIF dump from a project by traversing through files of the given language
     /// and emitting the LSIF equivalent using the given emitter.
-    pub fn index(opt: Opts, emitter: E) -> anyhow::Result<()> {
+    pub fn index(opt: Opts, emitter: E) -> Result<()> {
         let mut indexer = Self {
             emitter,
             tool_info: ToolInfo::default(),
@@ -61,7 +61,7 @@ where
         indexer.emit_metadata_and_project_vertex();
         indexer.emit_documents();
         {
-            let query = query_for_language(&opt.language).unwrap();
+            let query = query_for_language(&opt.language)?;
             let files = indexer.file_paths();
             let files = get_files_parsers(&opt.language, files)?;
             indexer.emit_definitions(files, &query);
@@ -74,6 +74,7 @@ where
         Ok(())
     }
 
+    /// Emits the contains relationship for all documents and the ranges that they contain.
     fn emit_contains(&mut self) {
         let documents = self.cache.get_documents();
         for d in documents {
@@ -85,17 +86,21 @@ where
         self.emit_contains_for_project();
     }
 
+    /// Emits a contains edge between a document and its ranges.
     fn emit_contains_for_project(&mut self) {
         let document_ids = self.cache.get_documents().map(|d| d.id).collect();
         self.emitter
             .emit_edge(Edge::contains(self.project_id, document_ids));
     }
 
+    /// Emits item relations for each indexed definition result value.
     fn link_reference_results_to_ranges(&mut self) {
         let def_infos = self.cache.get_mut_def_infos();
         Self::link_items_to_definitions(&def_infos.collect(), &mut self.emitter);
     }
 
+    /// Adds item relations between the given definition range and the ranges that
+    /// define and reference it.
     fn link_items_to_definitions(def_infos: &Vec<&mut DefinitionInfo>, emitter: &mut E) {
         for d in def_infos {
             let ref_result_id = emitter.emit_vertex(ReferenceResult {});
@@ -117,11 +122,11 @@ where
         }
     }
 
-    fn emit_definitions(&mut self, files: HashMap<String, (Parser, Tree, String)>, query: &Query) {
+    fn emit_definitions(&mut self, files: HashMap<String, ParseResult>, query: &Query) {
         let (def_sender, def_receiver) = channel();
         let (ref_sender, ref_receiver) = channel();
 
-        let capture_names = get_capture_names(&query, self.opt.language.get_queries());
+        let capture_names = get_capture_names(&query, self.opt.language.get_query_source());
 
         let bar = ProgressBar::new(files.len() as u64);
         bar.set_style(
@@ -131,7 +136,15 @@ where
         );
         files.into_par_iter().for_each_with(
             (def_sender, ref_sender),
-            |(d, r), (filename, (_, tree, file_content))| {
+            |(d, r),
+             (
+                filename,
+                ParseResult {
+                    tree,
+                    file_content,
+                    ..
+                },
+            )| {
                 Analyzer::run_analysis(filename, &tree, query, d, r, &file_content, &capture_names);
                 bar.inc(1);
             },
@@ -147,19 +160,26 @@ where
         bar.finish_and_clear();
     }
 
+    /// Emits data for the given reference object and caches it for emitting 'contains' later.
     fn index_reference(&mut self, r: Reference) {
         match &r.def {
             Some(def) => self.index_reference_to_definition(&def, &r),
             None => {
-                // TODO: Find the definition which might be a dependency or an import
+                if let Some(def) = self.cache.defs_with_name(&r.node_name).map(Arc::clone) {
+                    self.index_reference_to_definition(&def, &r);
+                } else {
+                    // TODO: Find the definition which might be a dependency
+                }
             }
         }
     }
 
+    /// Returns a range identifier for the given reference. If a range for the object has
+    /// not been emitted, a new vertex is created.
     fn ensure_range_for(&mut self, r: &Reference) -> ID {
         match self
             .cache
-            .get_range_id(&r.location.filename, r.location.range.start_byte)
+            .get_range_id(&r.location.file_path, r.location.range.start_byte)
         {
             Some(range_id) => range_id,
             None => {
@@ -170,6 +190,8 @@ where
         }
     }
 
+    /// Emits data for the given reference object that is defined within
+    /// an index target package.
     fn index_reference_to_definition(&mut self, def: &Definition, r: &Reference) {
         // 1. Emit/Get vertices(s)
         let range_id = self.ensure_range_for(r);
@@ -189,8 +211,10 @@ where
         self.cache.cache_reference(&def, &r, range_id);
     }
 
+    /// Emits data for the given definition object and caches it for
+    /// emitting 'contains' later.
     fn index_definition(&mut self, def: Arc<Definition>) {
-        let document_id = self.cache.get_document_id(&def.location.filename).unwrap();
+        let document_id = self.cache.get_document_id(&def.location.file_path).unwrap();
 
         // 1. Emit Vertices
         let range_id = self.emitter.emit_vertex(def.range());
@@ -207,14 +231,26 @@ where
                 },
             })
         });
+        let moniker_id = self.emitter.emit_vertex(Moniker {
+            kind: if def.kind == DefinitionKind::Exported {
+                "exported".to_string()
+            } else {
+                "local".to_string()
+            },
+            scheme: "zas".to_string(),
+            identifier: format!("{}:{}", def.location.file_name(), def.node_name.clone()),
+        });
 
         // 2. Connect the emitted vertices
-        self.emitter
-            .emit_edge(edge!(Next, range_id -> result_set_id));
-        self.emitter
-            .emit_edge(edge!(Definition, result_set_id -> def_result_id));
-        self.emitter
-            .emit_edge(Edge::item(def_result_id, vec![range_id], document_id));
+        let next_edge = edge!(Next, range_id -> result_set_id);
+        let definition_edge = edge!(Definition, result_set_id -> def_result_id);
+        let item_edge = Edge::item(def_result_id, vec![range_id], document_id);
+        let moniker_edge = edge!(Moniker, result_set_id -> moniker_id);
+
+        for edge in vec![next_edge, definition_edge, item_edge, moniker_edge].into_iter() {
+            self.emitter.emit_edge(edge);
+        }
+
         if let Some(id) = hover_result_id {
             self.emitter.emit_edge(edge!(Hover, result_set_id -> id));
         }
@@ -224,6 +260,8 @@ where
             .cache_definition(&def, document_id, range_id, result_set_id);
     }
 
+    /// Emits a metadata and project vertex. This method caches the identifier of the project
+    /// vertex, which is needed to construct the project/document contains relation later.
     fn emit_metadata_and_project_vertex(&mut self) {
         self.project_id = self.emitter.emit_vertex(MetaData {
             version: "0.1".into(),
@@ -244,40 +282,57 @@ where
         });
     }
 
+    /// Returns a `Vec` of of paths of all the files that have the same format as this
+    /// indexer's language.
     fn file_paths(&mut self) -> Vec<PathBuf> {
         if let Some(res) = &self.cached_file_paths {
-            res.clone()
-        } else {
-            let exs = self.opt.language.get_extensions();
-            let res: Vec<PathBuf> = Walk::new(PathBuf::from(&self.opt.project_root))
-                .into_iter()
-                .filter(|dir_entry_res| dir_entry_res.is_ok())
-                .map(std::result::Result::unwrap)
-                .filter(move |entry| {
-                    entry.metadata().unwrap().is_file() && check_file(entry, exs.clone())
-                })
-                .map(DirEntry::into_path)
-                .collect();
-            self.cached_file_paths = Some(res.clone());
-            res
+            return res.clone();
         }
+
+        let exs = self.opt.language.get_extensions();
+        let res: Vec<PathBuf> = Walk::new(PathBuf::from(&self.opt.project_root))
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(move |entry| {
+                entry.metadata().unwrap().is_file() && check_extensions(entry, exs.clone())
+            })
+            .map(DirEntry::into_path)
+            .collect();
+        self.cached_file_paths = Some(res.clone());
+        res
     }
 }
 
+/// Represents the result of parse operation on a file.
+struct ParseResult {
+    parser: Parser,
+    tree: Tree,
+    file_content: String,
+}
+
+/// Parses the given files with the given language's parser in parallel. 
+/// Returns a `HashMap` of filepath (as `String`) to `ParseResult`.
+///
+/// # Panics
+/// Panics if it fails to parse a file.
 fn get_files_parsers(
     lang: &Language,
     files: Vec<PathBuf>,
-) -> anyhow::Result<HashMap<String, (Parser, Tree, String)>> {
+) -> anyhow::Result<HashMap<String, ParseResult>> {
     let lang = ts_language_from(lang);
     let parsers = files
         .into_par_iter()
         .map(|path| {
-            let mut parser = parser_for(lang).unwrap();
+            let mut parser = parser_for_language(lang).unwrap();
             let file_content = get_file_content(&path);
             let tree = parser.parse(file_content.clone(), None).unwrap();
             (
                 path.to_str().unwrap().to_string(),
-                (parser, tree, file_content),
+                ParseResult {
+                    parser,
+                    tree,
+                    file_content,
+                },
             )
         })
         .collect();
@@ -285,15 +340,14 @@ fn get_files_parsers(
     Ok(parsers)
 }
 
-fn check_file(dir_entry: &DirEntry, extensions: Vec<String>) -> bool {
-    for ex in extensions {
-        if has_extension(dir_entry, &ex) {
-            return true;
-        }
-    }
-    return false;
+/// Returns true if the given `DirEntry` has an extension equal to one of
+/// the given extensions, and false otherwise.
+fn check_extensions(dir_entry: &DirEntry, extensions: Vec<String>) -> bool {
+    extensions.iter().any(|ex| has_extension(dir_entry, ex))
 }
 
+/// Returns true if the given `DirEntry`'s extension is equal to the given
+/// extension.
 fn has_extension(dir_entry: &DirEntry, target_ext: &str) -> bool {
     dir_entry
         .path()
@@ -303,6 +357,11 @@ fn has_extension(dir_entry: &DirEntry, target_ext: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Returns all the capture names (names starting with '@') in the given query source in
+/// the same order they appear.
+///
+/// This is different from `Query::capture_names` which returns a list of
+/// unique capture names.
 fn get_capture_names(query: &Query, query_src: String) -> Vec<String> {
     let start_bytes: Vec<usize> = (0..query.pattern_count())
         .map(|i| query.start_byte_for_pattern(i))

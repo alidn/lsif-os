@@ -11,6 +11,7 @@ use crate::{
 
 const DEFAULT_BUF_SIZE: usize = 64 * 1024;
 
+/// An `Emitter` that emits data to a file, in a new OS thread.
 pub struct FileEmitter {
     id: ID,
     entry_sender: Sender<Entry>,
@@ -22,6 +23,15 @@ impl FileEmitter {
         self.id
     }
 
+    /// Creates and return a new `FileEmitter` and a `Receiver` that should be used
+    /// to receive a signal indicating that the emitter has finished emitting all
+    /// the data.
+    ///
+    /// This method spawn a new thread that waits for data to emit until the `end` method 
+    /// is called.
+    ///
+    /// It is the reponsibiliy of the user of this struct to call `end` when there is
+    /// no more data to be emitted and then wait for the flush signal.
     pub(crate) fn new(file: File) -> (Self, Receiver<()>) {
         let (signal_sender, signal_receiver) = channel();
         let (entry_sender, entry_receiver) = channel();
@@ -85,7 +95,9 @@ impl Emitter for FileEmitter {
     }
 
     fn end(&mut self) {
-        let entry_sender = std::mem::swap(&mut channel().0, &mut self.entry_sender);
+        // to close the channel we need to take it and drop it
+        let mut entry_sender = channel().0;
+        std::mem::swap(&mut entry_sender, &mut self.entry_sender);
         drop(entry_sender);
     }
 }
