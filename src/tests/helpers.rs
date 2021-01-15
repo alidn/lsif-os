@@ -16,6 +16,29 @@ use crate::{
     },
 };
 
+pub fn project_root() -> String {
+    let root = std::fs::canonicalize(PathBuf::from("."))
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    println!("{}", root);
+    root
+}
+
+pub fn project_root_uri() -> String {
+    let root = std::fs::canonicalize(PathBuf::from("."))
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    protocol::types::Url::from_file_path(root)
+        .unwrap()
+        .to_string()
+}
+
 /// Indexes the test data of the given language and returns the LSIF elements found.
 /// Each LSIF element corresponds to a line emitted in an LSIF dump.
 pub fn get_elements(lang: Language) -> Elements {
@@ -28,7 +51,8 @@ pub fn get_elements(lang: Language) -> Elements {
 
     let opts = Opts {
         project_root: PathBuf::from(format!(
-            "/Users/zas/space/lsif-os/src/tests/test_data/{}",
+            "{}/src/tests/test_data/{}",
+            project_root(),
             lang.to_string()
         )),
         language: lang,
