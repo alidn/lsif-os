@@ -8,14 +8,7 @@ use crate::protocol::types::Language;
 #[derive(Clone, Debug, StructOpt)]
 #[structopt(
     name = "zas-lsif-tools",
-    about = "An extremely fast, parallelized and (mostly) language-agnostic LSIF indexer (use --langs to see supported languages).\n\n\
-         =================================\n\
-TODO:
-  - It currently ignores imports/exports (goto-definition doesn't work if a type is defined in a different file)
-  - Goto-definition for properties (i.e. class.method()): this won't be 100% precise but will be good enough
-  - Good hover contents when a definition is not documented and formatting docs
-  - Support for more languages
-================================="
+    about = "An extremely fast, parallelized and (mostly) language-agnostic LSIF indexer (use --langs to see supported languages).\n\n"
 )]
 pub struct Opts {
     /// Specifies the directory to index.

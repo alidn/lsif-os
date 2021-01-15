@@ -13,6 +13,7 @@ mod emitter;
 pub mod indexer;
 mod protocol;
 mod query_tests;
+mod tests;
 
 fn main() {
     let args = env::args();

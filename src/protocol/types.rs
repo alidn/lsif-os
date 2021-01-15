@@ -23,7 +23,7 @@ pub struct Entry {
     pub data: Element,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum Element {
@@ -31,7 +31,7 @@ pub enum Element {
     Edge(Edge),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "label")]
 pub enum Vertex {
@@ -52,7 +52,7 @@ pub enum Vertex {
     ExternalImportResult,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "label")]
 pub enum Edge {
@@ -86,14 +86,14 @@ pub enum Edge {
     Diagnostic(EdgeData),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EdgeData {
     pub in_v: lsp::NumberOrString,
     pub out_v: lsp::NumberOrString,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MultiEdgeDataWithDocument {
     pub document: u64,
@@ -101,7 +101,7 @@ pub struct MultiEdgeDataWithDocument {
     pub out_v: lsp::NumberOrString,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MultiEdgeData {
     pub in_vs: Vec<lsp::NumberOrString>,
@@ -115,7 +115,7 @@ pub enum DefinitionResultType {
     Array(LocationOrRangeId),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "property")]
 pub enum Item {
@@ -198,7 +198,7 @@ pub struct DefinitionResult {}
 #[serde(rename_all = "camelCase")]
 pub struct ReferenceResult {}
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MetaData {
     pub(crate) version: String,
@@ -209,7 +209,7 @@ pub struct MetaData {
     pub(crate) project_root: lsp::Url,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Moniker {
     pub(crate) kind: String,
@@ -238,7 +238,7 @@ impl Default for ToolInfo {
 }
 
 /// https://github.com/Microsoft/language-server-protocol/blob/master/indexFormat/specification.md#the-project-vertex
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub language_id: Language,
@@ -351,7 +351,7 @@ macro_rules! edge {
 ///     String(String),
 ///     Vec(Vec<String>)
 /// }
-/// 
+///
 /// impl_from_variant(String, StringOrVec);
 /// impl_from_variant(Vec<String>, StringOrVec);
 ///
