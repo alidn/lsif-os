@@ -2,6 +2,14 @@
 
 This is a (mostly) language-agnostic command-line tool for generating [LSIF](https://lsif.dev/) data.
 
+Currently supported languages:
+- Graphql
+- TypeScript
+- JavaScript
+- Java
+
+Currently, only TypeScript support is precise enough.
+
 ## Installation
 
 Binary download for MacOS is available on the [release tab](https://github.com/alidn/lsif-os/releases).
