@@ -9,13 +9,6 @@ pub type ID = u64;
 pub type RangeId = lsp::NumberOrString;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum LocationOrRangeId {
-    Location(lsp::Location),
-    RangeId(RangeId),
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
     pub id: lsp::NumberOrString,
@@ -237,7 +230,6 @@ impl Default for ToolInfo {
     }
 }
 
-/// https://github.com/Microsoft/language-server-protocol/blob/master/indexFormat/specification.md#the-project-vertex
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
@@ -285,12 +277,12 @@ impl FromStr for Language {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use Language::*;
 
-        match s {
-            "JavaScript" => Ok(JavaScript),
-            "GraphQL" => Ok(GraphQL),
-            "Lua" => Ok(Lua),
-            "Java" => Ok(Java),
-            "TypeScript" => Ok(TypeScript),
+        match &s.to_lowercase()[..] {
+            "javascript" => Ok(JavaScript),
+            "graphql" => Ok(GraphQL),
+            "lua" => Ok(Lua),
+            "java" => Ok(Java),
+            "typescript" => Ok(TypeScript),
             _ => Err("Language not supported".to_string()),
         }
     }
@@ -379,3 +371,10 @@ impl_from_variant!(ReferenceResult, Vertex);
 impl_from_variant!(DefinitionResult, Vertex);
 impl_from_variant!(HoverResult, Vertex);
 impl_from_variant!(Moniker, Vertex);
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum LocationOrRangeId {
+    Location(lsp::Location),
+    RangeId(RangeId),
+}
