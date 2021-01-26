@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,16 +13,23 @@ jobs:
   build_and_test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@master
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
-      
+      - uses: actions/checkout@master
+      - name: Build
+        run: |
+          chmod +x clone_parsers.sh
+          ./clone_parsers.sh
+          cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
+
   build_for_mac:
     name: MacOS
     runs-on: macos-10.15
     steps:
+      - name: Clone Parsers
+        run: |
+          chmod +x clone_parsers.sh
+          ./clone_parsers.sh
       - uses: actions/checkout@master
       - uses: actions-rs/cargo@v1
         with:
@@ -47,6 +54,10 @@ jobs:
     name: Linux
     runs-on: ubuntu-18.04
     steps:
+      - name: Clone Parsers
+        run: |
+          chmod +x clone_parsers.sh
+          ./clone_parsers.sh
       - uses: actions/checkout@master
       - uses: actions-rs/cargo@v1
         with:
