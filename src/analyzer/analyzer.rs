@@ -158,34 +158,24 @@ impl<'a> Analyzer<'a> {
         })
     }
 
-    /// If the last comment if not `None`, it replaces it with `None` and returns the comment,
-    /// Otherwise, returns `None`.
-    fn use_last_comment(&mut self) -> Option<String> {
-        let mut ret = None;
-        std::mem::swap(&mut ret, &mut self.last_comment);
-        ret
-    }
-
     /// Sets the value of the last comment to the given comment.
     fn cache_comment(&mut self, comment: String) {
         self.last_comment = Some(comment);
     }
 
-    /// If the given reference already has a definition, does nothing. Otherwise, looks-up
-    /// all the definition that are visible from the scope of the give reference. If it finds
+    /// Looks up all the definition that are visible from the scope of the give reference. If it finds
     /// a definition that matches that reference's name, it sets its definition value.
     fn try_find_def_of(&self, r: &mut Reference) {
-        r.def = self.defs.get(&r.node_name).and_then(|l| {
-            l.iter()
+        r.def = self.defs.get(&r.node_name).and_then(|defs| {
+            defs.iter()
                 .rev()
                 .find(|&d| {
-                    let matches_name = d.node_name == r.node_name;
                     let is_in_scope = match &d.kind {
-                        DefinitionKind::Exported => true,
-                        DefinitionKind::Scoped(scope) => scope.contains(&r.location.range),
+                        DefinitionScope::Exported => true,
+                        DefinitionScope::Local(scope) => scope.contains(&r.location.range),
                     };
 
-                    matches_name && is_in_scope
+                    is_in_scope
                 })
                 .map(Arc::clone)
         })
@@ -224,8 +214,8 @@ impl<'a> Analyzer<'a> {
             .iter()
             .find(|&d| {
                 let is_in_scope = match &d.kind {
-                    DefinitionKind::Exported => true,
-                    DefinitionKind::Scoped(scope) => scope.contains(&range),
+                    DefinitionScope::Exported => true,
+                    DefinitionScope::Local(scope) => scope.contains(&range),
                 };
 
                 d.location.range != range && is_in_scope
@@ -242,14 +232,14 @@ impl<'a> Analyzer<'a> {
     /// Returns a `Definition` from the given query match. It is the reponsibility
     /// of the caller to ensure that the query match is the result
     /// of a 'definition' query.
-    fn definition_from(&mut self, qmatch: QueryMatch, scoped: bool) -> Definition {
+    fn definition_from(&mut self, qmatch: QueryMatch, is_local: bool) -> Definition {
         let capture = qmatch.captures[0];
-        let kind = if scoped {
-            DefinitionKind::Scoped(
+        let kind = if is_local {
+            DefinitionScope::Local(
                 self.find_enclosing_scope(&capture.node.range())
                     .context(format!(
                         "Expected node at (file: {}, line: {}, column: {}) to have a scope\n
-                        This error probably means that the query file is wrong.",
+                        This error probably means that the query file is missing scope queries",
                         self.filename,
                         capture.node.range().start_point.row + 1,
                         capture.node.range().start_point.column + 1
@@ -265,16 +255,13 @@ impl<'a> Analyzer<'a> {
                     .range,
             )
         } else {
-            DefinitionKind::Exported
+            DefinitionScope::Exported
         };
 
         Definition {
             location: self.location_of(&capture.node),
             node_name: SmolStr::new(self.node_text_of(&capture.node)),
-            comment: Some(
-                self.use_last_comment()
-                    .unwrap_or(self.line_of(&capture.node)),
-            ),
+            comment: take(&mut self.last_comment).unwrap_or(self.line_of(&capture.node)),
             kind,
         }
     }
@@ -325,8 +312,8 @@ pub struct Scope {
 pub struct Definition {
     pub location: Location,
     pub node_name: SmolStr,
-    pub comment: Option<String>,
-    pub kind: DefinitionKind,
+    pub comment: String,
+    pub kind: DefinitionScope,
 }
 
 #[derive(Debug, Clone)]
@@ -368,9 +355,9 @@ impl FromPoint for protocol::Position {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DefinitionKind {
+pub enum DefinitionScope {
     Exported,
-    Scoped(Range),
+    Local(Range),
 }
 
 impl Reference {

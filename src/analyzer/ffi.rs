@@ -42,7 +42,7 @@ pub fn ts_language_from(language: &Language) -> tree_sitter::Language {
         Language::GraphQL => unsafe { tree_sitter_graphql() },
         Language::Java => unsafe { tree_sitter_java() },
         Language::Lua => unsafe { panic!() },
-        // TODO: the tsx parser is used for all typescript files which might 
+        // TODO: the tsx parser is used for all typescript files which might
         // cause performance degradation
         Language::TypeScript => unsafe { tree_sitter_tsx() },
     }

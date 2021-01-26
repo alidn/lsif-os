@@ -1,9 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
-use super::analyzer::{Definition, Location, Reference};
-use crate::analyzer::analyzer::DefinitionKind;
-use crate::protocol::types::ID;
 use smol_str::SmolStr;
+
+use super::analyzer::{Definition, Location, Reference};
+use crate::{analyzer::analyzer::DefinitionScope, protocol::types::ID};
 
 #[derive(Default)]
 pub struct LsifDataCache {
@@ -83,7 +83,7 @@ impl LsifDataCache {
         };
         self.def_infos
             .insert(def.location.clone(), def_info.clone());
-        if def.kind == DefinitionKind::Exported {
+        if def.kind == DefinitionScope::Exported {
             self.exported_defs
                 .insert(SmolStr::clone(&def.node_name), Arc::clone(def));
         }

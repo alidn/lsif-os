@@ -13,10 +13,10 @@ use tree_sitter::{Parser, Query, Tree};
 
 use crate::{
     analyzer::{
-        analyzer::{Analyzer, Definition, DefinitionKind, Reference},
+        analyzer::{Analyzer, Definition, DefinitionScope, Reference},
         ffi::{parser_for_language, query_for_language, ts_language_from},
+        file_utils::read_file,
         lsif_data_cache::{DefinitionInfo, LsifDataCache},
-        utils::get_file_content,
     },
     cli::Opts,
     edge,
@@ -63,7 +63,7 @@ where
         {
             let query = query_for_language(&opt.language)?;
             let files = indexer.file_paths();
-            let files = get_files_parsers(&opt.language, files)?;
+            let files = parse_files(&opt.language, files)?;
             indexer.emit_definitions(files, &query);
         }
         indexer.link_reference_results_to_ranges();
@@ -140,9 +140,7 @@ where
              (
                 filename,
                 ParseResult {
-                    tree,
-                    file_content,
-                    ..
+                    tree, file_content, ..
                 },
             )| {
                 Analyzer::run_analysis(filename, &tree, query, d, r, &file_content, &capture_names);
@@ -220,19 +218,17 @@ where
         let range_id = self.emitter.emit_vertex(def.range());
         let result_set_id = self.emitter.emit_vertex(ResultSet {});
         let def_result_id = self.emitter.emit_vertex(DefinitionResult {});
-        let hover_result_id = def.comment.clone().map(|c| {
-            self.emitter.emit_vertex(HoverResult {
-                result: Contents {
-                    contents: vec![LSIFMarkedString {
-                        language: self.opt.language.to_string(),
-                        value: c,
-                        is_raw_string: true,
-                    }],
-                },
-            })
+        let hover_result_id = self.emitter.emit_vertex(HoverResult {
+            result: Contents {
+                contents: vec![LSIFMarkedString {
+                    language: self.opt.language.to_string(),
+                    value: def.comment.clone(),
+                    is_raw_string: true,
+                }],
+            },
         });
         let moniker_id = self.emitter.emit_vertex(Moniker {
-            kind: if def.kind == DefinitionKind::Exported {
+            kind: if def.kind == DefinitionScope::Exported {
                 "exported".to_string()
             } else {
                 "local".to_string()
@@ -246,13 +242,18 @@ where
         let definition_edge = edge!(Definition, result_set_id -> def_result_id);
         let item_edge = Edge::item(def_result_id, vec![range_id], document_id);
         let moniker_edge = edge!(Moniker, result_set_id -> moniker_id);
+        let hover_edge = edge!(Hover, result_set_id -> hover_result_id);
 
-        for edge in vec![next_edge, definition_edge, item_edge, moniker_edge].into_iter() {
+        for edge in vec![
+            next_edge,
+            definition_edge,
+            item_edge,
+            moniker_edge,
+            hover_edge,
+        ]
+        .into_iter()
+        {
             self.emitter.emit_edge(edge);
-        }
-
-        if let Some(id) = hover_result_id {
-            self.emitter.emit_edge(edge!(Hover, result_set_id -> id));
         }
 
         // 3. Cache the result
@@ -310,12 +311,12 @@ struct ParseResult {
     file_content: String,
 }
 
-/// Parses the given files with the given language's parser in parallel. 
+/// Parses the given files with the given language's parser in parallel.
 /// Returns a `HashMap` of filepath (as `String`) to `ParseResult`.
 ///
 /// # Panics
 /// Panics if it fails to parse a file.
-fn get_files_parsers(
+fn parse_files(
     lang: &Language,
     files: Vec<PathBuf>,
 ) -> anyhow::Result<HashMap<String, ParseResult>> {
@@ -324,7 +325,7 @@ fn get_files_parsers(
         .into_par_iter()
         .map(|path| {
             let mut parser = parser_for_language(lang).unwrap();
-            let file_content = get_file_content(&path);
+            let file_content = read_file(&path).unwrap();
             let tree = parser.parse(file_content.clone(), None).unwrap();
             (
                 path.to_str().unwrap().to_string(),

@@ -3,7 +3,7 @@ use std::{
     sync::mpsc::{channel, Sender},
 };
 
-use languageserver_types::NumberOrString;
+use languageserver_types::{NumberOrString, Url};
 use protocol::types::Range;
 
 use crate::{
@@ -16,6 +16,7 @@ use crate::{
     },
 };
 
+/// Returns the absolute path to the root directory of this repository as a `String`
 pub fn project_root() -> String {
     let root = std::fs::canonicalize(PathBuf::from("."))
         .unwrap()
@@ -23,20 +24,12 @@ pub fn project_root() -> String {
         .unwrap()
         .to_string();
 
-    println!("{}", root);
     root
 }
 
-pub fn project_root_uri() -> String {
-    let root = std::fs::canonicalize(PathBuf::from("."))
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-
-    protocol::types::Url::from_file_path(root)
-        .unwrap()
-        .to_string()
+/// Returns the absolute path to the root directory of this repository as a `Url`
+pub fn project_root_uri() -> Url {
+    protocol::types::Url::from_file_path(project_root()).unwrap()
 }
 
 /// Indexes the test data of the given language and returns the LSIF elements found.
@@ -64,110 +57,105 @@ pub fn get_elements(lang: Language) -> Elements {
     rx.recv().unwrap()
 }
 
-pub fn find_range(
-    elements: &Elements,
-    filename: &str,
-    line_char: (u64, u64),
-) -> Option<(Range, ID)> {
-    for (v, id) in elements.vertices() {
-        match v {
-            Vertex::Range(r) => {
+impl Elements {
+    /// Returns the range in the given file with the given start line and character.
+    pub fn find_range(&self, filename: &str, line_char: (u64, u64)) -> Option<(Range, ID)> {
+        for (v, id) in self.vertices() {
+            if let Vertex::Range(r) = v {
                 if r.start.line == line_char.0 && r.start.character == line_char.1 {
-                    if &find_document_uri_containing(elements, id)? == filename {
+                    if &self.find_document_uri_containing(id)? == filename {
                         return Some((r.clone(), id));
                     }
                 }
             }
-            _ => {}
         }
-    }
-    None
-}
-
-fn find_range_by_id(elements: &Elements, target_id: ID) -> Option<Range> {
-    for (v, id) in elements.vertices() {
-        if let Vertex::Range(r) = v {
-            if id == target_id {
-                return Some(r.clone());
-            }
-        }
+        None
     }
 
-    None
-}
-
-pub fn find_definition_ranges(elements: &Elements, id: ID) -> Vec<Range> {
-    let mut ranges = Vec::new();
-    for (e, _) in elements.edges() {
-        if let Edge::Definition(def) = e {
-            if to_number(&def.out_v) == id {
-                ranges.extend(find_definition_ranges_by_result_id(
-                    &elements,
-                    to_number(&def.in_v),
-                ));
-            }
-        }
-    }
-
-    for (e, _) in elements.edges() {
-        if let Edge::Next(def) = e {
-            if to_number(&def.out_v) == id {
-                ranges.extend(find_definition_ranges(&elements, to_number(&def.in_v)));
-            }
-        }
-    }
-
-    ranges
-}
-
-fn find_definition_ranges_by_result_id(elements: &Elements, id: ID) -> Vec<Range> {
-    let mut ranges = Vec::new();
-    for (e, _) in elements.edges() {
-        if let Edge::Item(item) = e {
-            let d = match &item {
-                protocol::types::Item::Definition(v) => v,
-                protocol::types::Item::Reference(v) => v,
-                protocol::types::Item::Neither(v) => v,
-            };
-            for in_v in &d.in_vs {
-                if let Some(range) = find_range_by_id(&elements, to_number(in_v)) {
-                    ranges.push(range);
+    fn find_range_by_id(&self, target_id: ID) -> Option<Range> {
+        for (v, id) in self.vertices() {
+            if let Vertex::Range(r) = v {
+                if id == target_id {
+                    return Some(r.clone());
                 }
             }
         }
-    }
-    ranges
-}
 
-pub fn find_document_uri_containing(elements: &Elements, id: ID) -> Option<String> {
-    for (e, _) in elements.edges() {
-        match e {
-            Edge::Contains(d) => {
-                for in_v in &d.in_vs {
-                    if to_number(in_v) == id {
-                        return find_uri_by_document_id(elements, to_number(&d.out_v));
+        None
+    }
+
+    /// Returns the definition ranges attached to the range or result set
+    /// with the given identifier.
+    pub fn find_definition_ranges(&self, id: ID) -> Vec<Range> {
+        let mut ranges = Vec::new();
+        for (e, _) in self.edges() {
+            if let Edge::Definition(def) = e {
+                if to_number(&def.out_v) == id {
+                    ranges.extend(self.find_definition_ranges_by_result_id(to_number(&def.in_v)));
+                }
+            }
+        }
+
+        for (e, _) in self.edges() {
+            if let Edge::Next(def) = e {
+                if to_number(&def.out_v) == id {
+                    ranges.extend(self.find_definition_ranges(to_number(&def.in_v)));
+                }
+            }
+        }
+
+        ranges
+    }
+
+    /// Returns the ranges attached to the definition result with the given
+    /// identifier.
+    fn find_definition_ranges_by_result_id(&self, id: ID) -> Vec<Range> {
+        let mut ranges = Vec::new();
+        for (e, _) in self.edges() {
+            if let Edge::Item(item) = e {
+                let edge = match &item {
+                    protocol::types::Item::Definition(v) => v,
+                    protocol::types::Item::Reference(v) => v,
+                    protocol::types::Item::Neither(v) => v,
+                };
+                if to_number(&edge.out_v) == id {
+                    for in_v in &edge.in_vs {
+                        if let Some(range) = self.find_range_by_id(to_number(in_v)) {
+                            ranges.push(range);
+                        }
                     }
                 }
             }
-            _ => {}
         }
+        ranges
     }
-    None
-}
 
-pub fn find_uri_by_document_id(elements: &Elements, target_id: ID) -> Option<String> {
-    for (v, id) in elements.vertices() {
-        match &v {
-            Vertex::Document(d) => {
+    /// Returns the URI of the document that contains the vertex with the given id.
+    pub fn find_document_uri_containing(&self, id: ID) -> Option<String> {
+        for (e, _) in self.edges() {
+            if let Edge::Contains(d) = e {
+                for in_v in &d.in_vs {
+                    if to_number(in_v) == id {
+                        return self.find_uri_by_document_id(to_number(&d.out_v));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Returns the URI of the document with the given id.
+    pub fn find_uri_by_document_id(&self, target_id: ID) -> Option<String> {
+        for (v, id) in self.vertices() {
+            if let Vertex::Document(d) = v {
                 if id == target_id {
                     return Some(d.uri.to_string());
                 }
             }
-            _ => {}
         }
-    }
 
-    None
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -208,6 +196,7 @@ fn to_number(n: &NumberOrString) -> ID {
     }
 }
 
+/// An implementation of `Emitter` used in tests.
 pub struct TestsEmitter {
     elements: Vec<Entry>,
     pub tx: Sender<Elements>,

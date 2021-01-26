@@ -27,7 +27,7 @@ impl FileEmitter {
     /// to receive a signal indicating that the emitter has finished emitting all
     /// the data.
     ///
-    /// This method spawn a new thread that waits for data to emit until the `end` method 
+    /// This method spawn a new thread that waits for data to emit until the `end` method
     /// is called.
     ///
     /// It is the reponsibiliy of the user of this struct to call `end` when there is
